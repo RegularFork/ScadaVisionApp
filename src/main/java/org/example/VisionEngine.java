@@ -44,7 +44,7 @@ public class VisionEngine {
     }
 
     // Метод для OCR с твоей предобработкой
-    public String recognizeText(Mat crop) throws Exception {
+    public String recognizeText(Mat crop, int sliceLastDigit) throws Exception {
         Mat processed = new Mat();
         opencv_imgproc.resize(crop, processed, new Size(crop.cols() * 5, crop.rows() * 5));
         Mat hsv = new Mat();
@@ -59,7 +59,17 @@ public class VisionEngine {
 
         File tmp = new File("ocr_tmp.png");
         opencv_imgcodecs.imwrite(tmp.getAbsolutePath(), res);
-        return tesseract.doOCR(tmp).replaceAll("\\s+", "");
+
+        // Убираем всё лишнее, кроме цифр
+        String result = tesseract.doOCR(tmp).replaceAll("[^0-9]", "");
+
+        if (sliceLastDigit > 0) {
+            // Превращаем "448" в "44.8"
+            result = result.substring(0, result.length() - sliceLastDigit) + "." + result.substring(result.length() - sliceLastDigit);
+        }
+        return result;
+
+//        return tesseract.doOCR(tmp).replaceAll("\\s+", "");
     }
 
     // Метод для сохранения отладочного кадра
