@@ -6,21 +6,42 @@ import org.bytedeco.opencv.opencv_core.Rect;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.File;
+import java.util.List;
+import java.util.ArrayList;
 import javax.imageio.ImageIO;
 
 public class ScadaMonitor implements Runnable {
     private final VisionEngine engine = new VisionEngine("tessdata");
+    private final List<DataField> fields = new ArrayList<>();
+
+    private static final double BASE_WIDTH = 1143.0;
+    private static final double BASE_HEIGHT = 695.0;
+    // Соотношение сторон, которое мы будем поддерживать
+    private static final double ASPECT_RATIO = BASE_HEIGHT / BASE_WIDTH;
+
+    private boolean running = true; // флаг для завершения цикла в методе создания прицелочного png
+
+    public ScadaMonitor() {
+        // Просто добавляем поля в список. Расширять систему теперь можно одной строчкой!
+        fields.add(new DataField("TG-8 Load", 670, 564, 90, 33, false));
+        fields.add(new DataField("TG-9 Load", 963, 550, 90, 33, false)); // Пример нового поля
+//        fields.add(new DataField("Т окр. среды", 900, 50, 50, 30));   // Еще одно
+    }
 
     @Override
     public void run() {
-        while (true) {
+        while (running) {
             try {
                 // Вся логика опроса здесь, но она компактная,
                 // потому что сложные вещи делает engine
                 executeCycle();
                 Thread.sleep(5000);
-            } catch (Exception e) { e.printStackTrace(); }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
         }
+        System.out.println("Программа завершена после калибровки.");
+        System.exit(0); // Полное завершение приложения
     }
 
     private void executeCycle() throws Exception {
@@ -38,45 +59,57 @@ public class ScadaMonitor implements Runnable {
 
         // 3. Загружаем скриншот и шаблоны углов для OpenCV
         Mat scene = opencv_imgcodecs.imread(screenFile.getAbsolutePath());
-        Mat tL = opencv_imgcodecs.imread("scada_top_left.png");
-        Mat bR = opencv_imgcodecs.imread("scada_bottom_right.png");
+        Mat tL = opencv_imgcodecs.imread("anchors/scada_top_left.png");
+        Mat bR = opencv_imgcodecs.imread("anchors/scada_top_right.png");
 
         if (scene.empty() || tL.empty() || bR.empty()) return;
 
         // 4. Используем "Двигатель" для поиска углов
         org.bytedeco.opencv.opencv_core.Point ptTopLeft = engine.findTemplate(scene, tL);
-        org.bytedeco.opencv.opencv_core.Point ptBottomRight = engine.findTemplate(scene, bR);
+//        org.bytedeco.opencv.opencv_core.Point ptBottomRight = engine.findTemplate(scene, bR);
+        org.bytedeco.opencv.opencv_core.Point ptTopRight = engine.findTemplate(scene, bR);
 
-        if (ptTopLeft != null && ptBottomRight != null) {
-            // Считаем актуальный масштаб (базовые размеры те же: 1071x625)
-            double kX = (ptBottomRight.x() - ptTopLeft.x()) / 1071.0;
-            double kY = (ptBottomRight.y() - ptTopLeft.y()) / 625.0;
+        if (ptTopLeft != null && ptTopRight != null) {
+            double currentWidth = ptTopRight.x() -ptTopLeft.x();
 
-            // 5. Вырезаем зону ТГ-8 (базовые координаты: 670, 540)
-            Rect tg8Rect = new Rect(
-                    ptTopLeft.x() + (int) (670 * kX),
-                    ptTopLeft.y() + (int) (540 * kY),
-                    (int) (60 * kX),
-                    (int) (35 * kY)
-            );
+            // Вычисляем коэффициент масштабирования kX
+            // ВАЖНО: 1040.0 — это примерное расстояние между TREI и ПТК в пикселях на твоем эталоне.
+            // Замерь его точно в Paint на скриншоте 1143х695!
+            double scale = currentWidth / 1040.0;
 
-            // Проверка, чтобы не выйти за границы кадра
-            if (tg8Rect.x() + tg8Rect.width() > scene.cols()) tg8Rect.width(scene.cols() - tg8Rect.x());
+            double kX = scale;
+            // Масштаб по Y теперь жестко привязан к X
+            double kY = scale;
 
-            Mat mwCrop = new Mat(scene, tg8Rect);
+            for (DataField field : fields) {
+                // 1. Получаем масштабированный Rect для конкретного поля
+                Rect targetRect = field.getScaledRect(ptTopLeft.x(), ptTopLeft.y(), kX, kY);
 
-            // 6. Отдаем вырезанный кусок "Двигателю" на чистку и распознавание
-            String result = engine.recognizeText(mwCrop);
+                // 2. Проверка границ (чтобы не вылететь за край сцены)
+                if (targetRect.x() + targetRect.width() > scene.cols())
+                    targetRect.width(scene.cols() - targetRect.x());
+                if (targetRect.y() + targetRect.height() > scene.rows())
+                    targetRect.height(scene.rows() - targetRect.y());
 
-            // Финальная чистка символов (MW, запятые и т.д.)
-            String clean = result.replace("mw", "MW").replace("Mw", "MW")
-                    .replace("a", "4").replace("I", "1")
-                    .replace("s", "5").replace("‘", "")
-                    .replace("]", "").replace(")", "").replace(",", ".");
+                // 3. Вырезаем и распознаем
+                Mat mwCrop = new Mat(scene, targetRect);
+                if (field.savePngBox) {
+                    engine.saveDebugCrop(mwCrop, field.getName()); // Добавь геттер getName() в DataField
+                    this.running = false;
+                }
+                String result = engine.recognizeText(mwCrop);
 
-            System.out.println("[" + java.time.LocalTime.now().withNano(0) + "] ТГ-8 Нагрузка, МВт: " + clean);
-        } else {
+                // 4. Чистим текст
+                String clean = result.replace("mw", "MW").replace("Mw", "MW")
+                        .replace("a", "4").replace("I", "1")
+                        .replace("s", "5").replace(",", ".");
+
+                // 5. Печатаем результат через метод объекта
+                field.printState(clean);
+            }
+        }else{
             System.out.println("Схема не найдена (не совпали углы).");
         }
+        System.out.println("= = = = = = = = = =");
     }
 }

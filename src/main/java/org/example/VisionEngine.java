@@ -61,4 +61,11 @@ public class VisionEngine {
         opencv_imgcodecs.imwrite(tmp.getAbsolutePath(), res);
         return tesseract.doOCR(tmp).replaceAll("\\s+", "");
     }
+
+    // Метод для сохранения отладочного кадра
+    public void saveDebugCrop(Mat crop, String fieldName) {
+        // Убираем пробелы из имени для названия файла
+        String fileName = "debug_" + fieldName.replaceAll("\\s+", "_") + ".png";
+        opencv_imgcodecs.imwrite(fileName, crop);
+    }
 }
