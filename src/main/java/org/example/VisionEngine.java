@@ -44,7 +44,7 @@ public class VisionEngine {
     }
 
     // Метод для OCR с твоей предобработкой
-    public String recognizeText(Mat crop, int sliceLastDigit) throws Exception {
+    public String recognizeText(Mat crop, int decimalPlaces) throws Exception {
         Mat processed = new Mat();
         opencv_imgproc.resize(crop, processed, new Size(crop.cols() * 5, crop.rows() * 5));
         Mat hsv = new Mat();
@@ -63,9 +63,13 @@ public class VisionEngine {
         // Убираем всё лишнее, кроме цифр
         String result = tesseract.doOCR(tmp).replaceAll("[^0-9]", "");
 
-        if (sliceLastDigit > 0) {
-            // Превращаем "448" в "44.8"
-            result = result.substring(0, result.length() - sliceLastDigit) + "." + result.substring(result.length() - sliceLastDigit);
+        if (decimalPlaces > 0) {
+            if (result.length() > decimalPlaces) {
+                result = result.substring(0, result.length() - decimalPlaces) + "." + result.substring(result.length() - decimalPlaces);
+            } else if (result.length() > 0) {
+                // Если пришло "8" или ".8", а нужно 1 знак -> превращаем в "0.8"
+                result = "0." + result;
+            }
         }
         return result;
 

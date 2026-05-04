@@ -8,7 +8,6 @@ import java.awt.image.BufferedImage;
 import java.io.File;
 import java.util.List;
 import java.util.ArrayList;
-import javax.imageio.ImageIO;
 
 public class ScadaMonitor implements Runnable {
     private final VisionEngine engine = new VisionEngine("tessdata");
@@ -23,8 +22,8 @@ public class ScadaMonitor implements Runnable {
 
     public ScadaMonitor() {
         // Просто добавляем поля в список. Расширять систему теперь можно одной строчкой!
-        fields.add(new DataField("TG-8 Load", 670, 564, 90, 33, false));
-        fields.add(new DataField("TG-9 Load", 963, 550, 90, 33, false)); // Пример нового поля
+        fields.add(new DataField("TG-8 Load", 670, 564, 90, 33, 1, false));
+        fields.add(new DataField("TG-9 Load", 963, 550, 90, 33, 1, false)); // Пример нового поля
 //        fields.add(new DataField("Т окр. среды", 900, 50, 50, 30));   // Еще одно
     }
 
@@ -97,7 +96,7 @@ public class ScadaMonitor implements Runnable {
                     engine.saveDebugCrop(mwCrop, field.getName()); // Добавь геттер getName() в DataField
                     this.running = false;
                 }
-                String result = engine.recognizeText(mwCrop);
+                String result = engine.recognizeText(mwCrop, field.decimalPlaces);
 
                 // 4. Чистим текст
                 String clean = result.replace("mw", "MW").replace("Mw", "MW")

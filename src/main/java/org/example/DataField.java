@@ -3,16 +3,18 @@ package org.example;
 import org.bytedeco.opencv.opencv_core.Rect;
 
 public class DataField {
-    private String name;    // Название (например, "ТГ-8 Нагрузка")
+    private final String name;    // Название (например, "ТГ-8 Нагрузка")
     private final int baseX, baseY, baseW, baseH; // Базовые координаты (из Paint)
+    public int decimalPlaces;
     public boolean savePngBox;
 
-    public DataField(String name, int x, int y, int w, int h, boolean savePngBox) {
+    public DataField(String name, int x, int y, int w, int h, int decimalPlaces, boolean savePngBox) {
         this.name = name;
         this.baseX = x;
         this.baseY = y;
         this.baseW = w;
         this.baseH = h;
+        this.decimalPlaces = decimalPlaces;
         this.savePngBox = savePngBox;
     }
 
